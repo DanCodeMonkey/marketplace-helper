@@ -26,7 +26,7 @@ import {
   syncStatus,
   saveZipCode,
 } from "../controllers/syncController.js";
-import { exportExcel } from "../controllers/exportController.js";
+import { exportExcel, exportProducts } from "../controllers/exportController.js";
 import { showRules, saveRules } from "../controllers/rulesController.js";
 import { showSimulator, runSimulator } from "../controllers/simulatorController.js";
 import { showProducts, saveProductCost, saveProductDims } from "../controllers/productController.js";
@@ -73,5 +73,6 @@ router.post("/produtos/medidas", saveProductDims);
 router.post("/regras", saveRules);
 router.post("/simulador", runSimulator);
 router.get("/export", exportExcel);
+router.get("/produtos/export", exportProducts);
 
 export default router;

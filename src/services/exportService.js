@@ -3,6 +3,7 @@ import prisma from "../config/prisma.js";
 import { buildItemWhere } from "./itemService.js";
 import { getBusinessRules } from "./rulesService.js";
 import { computeProfit } from "./calcService.js";
+import { getProductsForExport } from "./productService.js";
 
 // Gera um workbook Excel com os itens do usuario (respeita o filtro de busca)
 export async function buildItemsWorkbook(userId, search) {
@@ -74,5 +75,69 @@ export async function buildItemsWorkbook(userId, search) {
 
   ws.autoFilter = { from: "A1", to: "AD1" };
 
+  return wb;
+}
+
+// Gera um workbook Excel com os produtos (por SKU): custo, medidas, tamanho no
+// Full e comparação de frete cobrado × real. Respeita o filtro de busca.
+export async function buildProductsWorkbook(userId, search) {
+  const produtos = await getProductsForExport(userId, search || "");
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Marketplace Helper";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Produtos");
+
+  ws.columns = [
+    { header: "SKU", key: "sku", width: 20 },
+    { header: "PRODUTO", key: "nome", width: 46 },
+    { header: "ANUNCIOS", key: "qtd", width: 10 },
+    { header: "CUSTO", key: "custo", width: 12 },
+    { header: "LARGURA (cm)", key: "largura", width: 13 },
+    { header: "ALTURA (cm)", key: "altura", width: 12 },
+    { header: "COMPRIMENTO (cm)", key: "comprimento", width: 16 },
+    { header: "PESO (kg)", key: "pesoReal", width: 11 },
+    { header: "SOMA LADOS (cm)", key: "somaLados", width: 15 },
+    { header: "TAMANHO FULL", key: "tamanhoFull", width: 15 },
+    { header: "DENTRO DO FULL", key: "dentroDoFull", width: 15 },
+    { header: "FRETE COBRADO", key: "freteCobrado", width: 14 },
+    { header: "FRETE REAL", key: "freteReal", width: 12 },
+    { header: "DIVERGENCIA", key: "delta", width: 13 },
+    { header: "FRETE STATUS", key: "freteStatus", width: 16 },
+  ];
+
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE600" } };
+
+  const num = (v, d = 2) => (v != null ? Number(Number(v).toFixed(d)) : null);
+
+  for (const p of produtos) {
+    const freteStatus = !p.temMedidas
+      ? "Sem medidas"
+      : p.freteCobrado == null
+        ? "Sem cobrado"
+        : p.divergente
+          ? "Divergente"
+          : "OK";
+    ws.addRow({
+      sku: p.sku,
+      nome: p.nome,
+      qtd: p.qtd,
+      custo: num(p.custo),
+      largura: p.largura ?? null,
+      altura: p.altura ?? null,
+      comprimento: p.comprimento ?? null,
+      pesoReal: p.pesoReal ?? null,
+      somaLados: p.somaLados ?? null,
+      tamanhoFull: p.tamanhoFull ?? "—",
+      dentroDoFull: p.tamanhoFull == null ? "—" : (p.dentroDoFull ? "SIM" : "NAO"),
+      freteCobrado: num(p.freteCobrado),
+      freteReal: num(p.freteReal),
+      delta: p.delta != null ? num(Math.abs(p.delta)) : null,
+      freteStatus,
+    });
+  }
+
+  ws.autoFilter = { from: "A1", to: "O1" };
   return wb;
 }

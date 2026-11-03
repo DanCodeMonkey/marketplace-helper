@@ -224,6 +224,20 @@
     });
   }
 
+  // Badge do tamanho no Full (mesmas cores da view).
+  function tamBadgeHtml(nome) {
+    if (!nome) return '<span class="text-muted small">—</span>';
+    const m = { "Pequeno": "success", "Médio": "primary", "Grande": "warning", "Extragrande": "secondary", "Fora do Full": "danger" };
+    const cls = m[nome] || "secondary";
+    const ico = nome === "Fora do Full" ? "bi-x-octagon" : "bi-box-seam";
+    return '<span class="badge text-bg-' + cls + '"><i class="bi ' + ico + '"></i> ' + nome + "</span>";
+  }
+  function renderTamanho(sku, nome) {
+    document.querySelectorAll('.produto-tamanho[data-sku="' + CSS.escape(sku) + '"]').forEach((cell) => {
+      cell.innerHTML = tamBadgeHtml(nome);
+    });
+  }
+
   // Token por SKU: ignora respostas que chegam fora de ordem.
   const tokens = {};
 
@@ -242,7 +256,7 @@
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "falha");
-      if (tokens[sku] === myToken) renderFrete(sku, data.comparacao);
+      if (tokens[sku] === myToken) { renderFrete(sku, data.comparacao); renderTamanho(sku, data.tamanho); }
     } catch (e) {
       /* silencioso: mantém o valor digitado */
     } finally {

@@ -18,6 +18,7 @@ router.get("/me", a(api.me));
 router.get("/dashboard", a(api.dashboard));
 router.get("/anuncios", a(api.anuncios));
 router.get("/produtos", a(api.produtos));
+router.get("/produtos/export", a(api.exportProdutos));
 router.post("/produtos/:sku/custo", a(api.saveCusto));
 router.post("/produtos/:sku/medidas", a(api.saveMedidas));
 router.get("/regras", a(api.getRegras));

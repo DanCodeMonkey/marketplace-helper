@@ -9,6 +9,7 @@ import { getBusinessRules, updateBusinessRules } from "../services/rulesService.
 import { freteEstimado } from "../services/freteTable.js";
 import { runSync, getSyncState, getSettings, updateZipCode } from "../services/syncService.js";
 import { getAuthStatus } from "../services/mlAuth.js";
+import { buildProductsWorkbook } from "../services/exportService.js";
 
 const publicUser = (u) => ({ id: u.id, email: u.email, storeName: u.storeName, whatsapp: u.whatsapp });
 
@@ -52,6 +53,15 @@ export async function anuncios(req, res) {
 export async function produtos(req, res) {
   const { page, search } = req.query;
   res.json(await listProducts({ userId: req.user.id, page, search }));
+}
+
+export async function exportProdutos(req, res) {
+  const wb = await buildProductsWorkbook(req.user.id, req.query.search || "");
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="produtos_${date}.xlsx"`);
+  await wb.xlsx.write(res);
+  res.end();
 }
 
 export async function saveCusto(req, res) {

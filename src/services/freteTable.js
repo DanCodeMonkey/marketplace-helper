@@ -71,6 +71,48 @@ export function freteEstimado(largura, altura, comprimento, peso, preco) {
   return { cubagem, considerado, usaCubagem: cubagem > p, frete };
 }
 
+// Classificação de tamanho no Full do Mercado Livre, a partir das medidas (cm)
+// e do peso (kg). As faixas comparam os lados ORDENADOS do produto com os
+// limites ordenados de cada tamanho (independe da orientação).
+const TAMANHOS_FULL = [
+  { nome: "Pequeno", lados: [12, 15, 25] },
+  { nome: "Médio", lados: [28, 36, 51] },
+  { nome: "Grande", lados: [60, 60, 70] },
+];
+const PESO_PADRAO_FULL = 18;  // kg: acima disso já é Extragrande
+const PESO_MAX_FULL = 25;     // kg: acima disso, fora do Full
+const LADO_MAX_FULL = 120;    // cm: nenhum lado pode passar disso
+const SOMA_MAX_FULL = 260;    // cm: soma dos lados
+
+// Retorna { tamanho, dentroDoFull, soma, maiorLado } ou null se faltar medida.
+export function classificarTamanhoFull(largura, altura, comprimento, peso) {
+  const toNum = (v) => {
+    const n = typeof v === "string" ? parseFloat(v.replace(",", ".")) : Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const l = toNum(largura), a = toNum(altura), c = toNum(comprimento), p = toNum(peso);
+  if (!(l > 0 && a > 0 && c > 0 && p > 0)) return null;
+
+  const lados = [l, a, c].sort((x, y) => x - y);
+  const soma = l + a + c;
+  const maiorLado = Math.max(l, a, c);
+
+  // Fora dos limites máximos aceitos no Full
+  if (p > PESO_MAX_FULL || maiorLado > LADO_MAX_FULL || soma > SOMA_MAX_FULL) {
+    return { tamanho: "Fora do Full", dentroDoFull: false, soma, maiorLado };
+  }
+  // Até 18 kg: tenta encaixar no menor tamanho possível pelos lados
+  if (p <= PESO_PADRAO_FULL) {
+    for (const t of TAMANHOS_FULL) {
+      if (lados[0] <= t.lados[0] && lados[1] <= t.lados[1] && lados[2] <= t.lados[2]) {
+        return { tamanho: t.nome, dentroDoFull: true, soma, maiorLado };
+      }
+    }
+  }
+  // Maior que "Grande" e/ou peso entre 18 e 25 kg
+  return { tamanho: "Extragrande", dentroDoFull: true, soma, maiorLado };
+}
+
 // Avalia a divergência de frete de um anúncio (precisa de medidas + frete cobrado).
 // Usa precoPor (se houver) senão precoDe para escolher a coluna de preço.
 export function avaliaDivergencia(item) {

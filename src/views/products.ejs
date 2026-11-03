@@ -2,10 +2,24 @@
 <%- include('partials/head') %>
 <%- include('partials/nav') %>
 
+<%
+  // Badge do tamanho no Full (pequeno/médio/grande/extragrande/fora do Full).
+  function tamBadge(nome) {
+    if (!nome) return '<span class="text-muted small">—</span>';
+    var m = { 'Pequeno': 'success', 'Médio': 'primary', 'Grande': 'warning', 'Extragrande': 'secondary', 'Fora do Full': 'danger' };
+    var cls = m[nome] || 'secondary';
+    var ico = nome === 'Fora do Full' ? 'bi-x-octagon' : 'bi-box-seam';
+    return '<span class="badge text-bg-' + cls + '"><i class="bi ' + ico + '"></i> ' + nome + '</span>';
+  }
+%>
+
 <div class="container-fluid py-3 px-md-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
     <h3 class="mb-0"><i class="bi bi-box2"></i> Produtos</h3>
-    <a href="/medir" class="btn btn-sm btn-primary"><i class="bi bi-rulers"></i> Medir com câmera/balança</a>
+    <div class="d-flex gap-2">
+      <a href="/produtos/export<%= search ? '?search=' + encodeURIComponent(search) : '' %>" class="btn btn-sm btn-success"><i class="bi bi-file-earmark-excel"></i> Exportar Excel</a>
+      <a href="/medir" class="btn btn-sm btn-primary"><i class="bi bi-rulers"></i> Medir com câmera/balança</a>
+    </div>
   </div>
   <p class="text-muted">
     Cada produto agrupa os anúncios com o mesmo <strong>SKU</strong>. O custo e as <strong>medidas</strong>
@@ -44,12 +58,13 @@
           <th class="text-center">Anúncios</th>
           <th class="text-end" style="width: 150px;">Custo do produto</th>
           <th class="text-center" style="width: 230px;">Medidas (cm · kg)</th>
+          <th class="text-center" style="width: 130px;">Tamanho Full</th>
           <th class="text-end" style="width: 185px;">Frete cobrado × real</th>
         </tr>
       </thead>
       <tbody>
         <% if (products.length === 0) { %>
-          <tr><td colspan="7" class="text-center text-muted py-4">
+          <tr><td colspan="8" class="text-center text-muted py-4">
             Nenhum produto com SKU. Rode um <strong>Atualizar tudo</strong> na tela de Anúncios.
           </td></tr>
         <% } %>
@@ -92,6 +107,9 @@
                 <input class="form-control form-control-sm med-dim med-dim-peso text-center" data-dim="pesoReal" inputmode="decimal" placeholder="kg" title="Peso real (kg)" value="<%= p.pesoReal != null ? p.pesoReal : '' %>" />
               </div>
             </td>
+
+            <!-- Tamanho no Full -->
+            <td class="text-center produto-tamanho" data-sku="<%= p.sku %>"><%- tamBadge(p.tamanhoFull) %></td>
 
             <!-- Frete cobrado × real -->
             <td class="text-end produto-frete" data-sku="<%= p.sku %>">
@@ -176,6 +194,12 @@
                   <div class="mcard-lbl text-center mt-1" style="font-size:.6rem">Peso</div>
                 </div>
               </div>
+            </div>
+
+            <!-- Tamanho no Full -->
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <span class="mcard-lbl">Tamanho no Full</span>
+              <div class="produto-tamanho" data-sku="<%= p.sku %>"><%- tamBadge(p.tamanhoFull) %></div>
             </div>
 
             <!-- Frete cobrado × real -->

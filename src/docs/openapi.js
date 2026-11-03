@@ -113,6 +113,13 @@ export const openapiSpec = {
         responses: { 200: json({ total: 10, page: 1, totalPages: 1, products: [{ sku: "SKA", nome: "Produto A", qtd: 2, custo: 70, largura: 40, altura: 30, comprimento: 50, pesoReal: 2, freteCobrado: 10, freteReal: 58.75, delta: 48.75, divergente: true }] }) },
       },
     },
+    "/produtos/export": {
+      get: {
+        tags: ["Produtos"], summary: "Exporta os produtos (custo, medidas, tamanho no Full e frete) em Excel", security: bearer,
+        parameters: [{ name: "search", in: "query", schema: { type: "string" } }],
+        responses: { 200: { description: "Planilha .xlsx", content: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {} } } },
+      },
+    },
     "/produtos/{sku}/custo": {
       post: {
         tags: ["Produtos"], summary: "Define o custo de um SKU (aplica a todos os anúncios)", security: bearer,

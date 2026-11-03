@@ -1,12 +1,13 @@
 import prisma from "../config/prisma.js";
-import { avaliaDivergencia } from "./freteTable.js";
+import { avaliaDivergencia, classificarTamanhoFull } from "./freteTable.js";
 
 export const PAGE_SIZE = 50;
 
 const basePreco = (it) => (it.precoPor && it.precoPor > 0 ? it.precoPor : it.precoDe || 0);
 
-// Agrupa os anúncios por SKU, formando "produtos".
-export async function listProducts({ userId, page = 1, search = "" } = {}) {
+// Monta a lista completa de produtos (agrupados por SKU), já com custo,
+// medidas, comparação de frete e tamanho no Full. Ordenada por nome.
+async function buildProductList(userId) {
   const items = await prisma.item.findMany({
     where: { userId, sku: { not: null } },
     select: {
@@ -34,29 +35,27 @@ export async function listProducts({ userId, page = 1, search = "" } = {}) {
       g.custos.add(it.custoProduto);
       if (g.custo == null) g.custo = it.custoProduto;
     }
-    // Medidas: usa o primeiro valor preenchido encontrado no SKU.
     for (const campo of ["largura", "altura", "comprimento", "pesoReal"]) {
       if (g[campo] == null && it[campo] != null) g[campo] = it[campo];
     }
     if (!g.thumbnail && it.thumbnail) g.thumbnail = it.thumbnail;
   }
 
-  let products = [...map.values()].map((g) => {
+  const products = [...map.values()].map((g) => {
     const dims = { largura: g.largura, altura: g.altura, comprimento: g.comprimento, pesoReal: g.pesoReal };
 
-    // Anúncio representativo: o de maior preço com frete cobrado disponível.
     const comFrete = g.itens.filter((it) => it.frete != null);
     const rep = (comFrete.length ? comFrete : g.itens)
       .slice()
       .sort((a, b) => basePreco(b) - basePreco(a))[0];
-
     const div = rep ? avaliaDivergencia({ ...rep, ...dims }) : null;
 
-    // Quantos anúncios do SKU estão divergentes (cada um com seu preço).
     let nDivergentes = 0;
     for (const it of g.itens) {
       if (avaliaDivergencia({ ...it, ...dims }).divergente) nDivergentes++;
     }
+
+    const tam = classificarTamanhoFull(g.largura, g.altura, g.comprimento, g.pesoReal);
 
     return {
       sku: g.sku,
@@ -74,40 +73,46 @@ export async function listProducts({ userId, page = 1, search = "" } = {}) {
       delta: div ? div.delta : null,
       divergente: div ? div.divergente : false,
       nDivergentes,
+      tamanhoFull: tam ? tam.tamanho : null,
+      dentroDoFull: tam ? tam.dentroDoFull : null,
+      somaLados: tam ? tam.soma : null,
     };
   });
 
-  if (search && search.trim()) {
-    const q = search.trim().toLowerCase();
-    products = products.filter(
-      (p) =>
-        p.sku.toLowerCase().includes(q) ||
-        p.nome.toLowerCase().includes(q) ||
-        p.mlbs.some((m) => m.toLowerCase().includes(q))
-    );
-  }
-
   products.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return products;
+}
+
+function filtrar(products, search) {
+  if (!search || !search.trim()) return products;
+  const q = search.trim().toLowerCase();
+  return products.filter(
+    (p) =>
+      p.sku.toLowerCase().includes(q) ||
+      p.nome.toLowerCase().includes(q) ||
+      p.mlbs.some((m) => m.toLowerCase().includes(q))
+  );
+}
+
+// Lista paginada para a tela de Produtos.
+export async function listProducts({ userId, page = 1, search = "" } = {}) {
+  const products = filtrar(await buildProductList(userId), search);
 
   const total = products.length;
   const currentPage = Math.max(1, Number(page) || 1);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = products.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  // Anúncios sem SKU (não aparecem aqui — editáveis na tela de Anúncios)
   const semSku = await prisma.item.count({
     where: { userId, OR: [{ sku: null }, { sku: "" }] },
   });
 
-  return {
-    products: pageItems,
-    total,
-    page: currentPage,
-    totalPages,
-    pageSize: PAGE_SIZE,
-    search,
-    semSku,
-  };
+  return { products: pageItems, total, page: currentPage, totalPages, pageSize: PAGE_SIZE, search, semSku };
+}
+
+// Todos os produtos (sem paginação) para o relatório Excel.
+export async function getProductsForExport(userId, search = "") {
+  return filtrar(await buildProductList(userId), search);
 }
 
 // Aplica o custo a TODOS os anúncios de um SKU.
@@ -146,6 +151,7 @@ export async function setDimsForSku(userId, sku, dims) {
   const comFrete = itens.filter((it) => it.frete != null);
   const rep = (comFrete.length ? comFrete : itens).slice().sort((a, b) => basePreco(b) - basePreco(a))[0];
   const div = rep ? avaliaDivergencia(rep) : null;
+  const tam = classificarTamanhoFull(data.largura, data.altura, data.comprimento, data.pesoReal);
 
-  return { ...data, afetados: r.count, comparacao: div };
+  return { ...data, afetados: r.count, comparacao: div, tamanho: tam ? tam.tamanho : null };
 }
