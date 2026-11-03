@@ -1,9 +1,13 @@
 import express from "express";
 import cookieSession from "cookie-session";
+import cors from "cors";
+import swaggerUi from "swagger-ui-express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config/env.js";
 import routes from "./routes/index.js";
+import apiRoutes from "./routes/api.js";
+import { openapiSpec } from "./docs/openapi.js";
 import { startScheduler } from "./scheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +35,21 @@ app.use(
   })
 );
 
-// Rotas
+// ===== API JSON (para front React / app React Native / IoT) =====
+// CORS liberado na API (token Bearer; a web renderizada continua por sessão).
+app.use("/api", cors());
+// Documentação Swagger (antes do router para não exigir token em /api/docs)
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
+app.get("/api/openapi.json", (req, res) => res.json(openapiSpec));
+app.use("/api", apiRoutes);
+// 404 e erros da API em JSON (antes dos handlers HTML abaixo)
+app.use("/api", (req, res) => res.status(404).json({ error: "Rota não encontrada." }));
+app.use("/api", (err, req, res, next) => {
+  console.error("[API ERRO]", err);
+  res.status(500).json({ error: err.message || "Erro interno." });
+});
+
+// ===== Aplicação web (renderizada) =====
 app.use("/", routes);
 
 // 404
