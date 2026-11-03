@@ -114,6 +114,7 @@ Requisição HTTP
 | Criptografia | **node:crypto** (AES-256-GCM) | Dados sensíveis em repouso |
 | Agendamento | **node-cron** | Sincronização automática |
 | Exportação | **ExcelJS** | Geração de `.xlsx` |
+| API JSON | **jsonwebtoken** (JWT) + **cors** + **swagger-ui-express** | API `/api` para front/app e documentação |
 | Configuração | **dotenv** | Variáveis de ambiente |
 
 ---
@@ -135,15 +136,20 @@ dashboard ML/
 │   ├── config/
 │   │   ├── env.js             # Carrega e valida variáveis de ambiente
 │   │   ├── prisma.js          # Instância única (singleton) do Prisma Client
-│   │   └── crypto.js          # Criptografia AES-256-GCM (encrypt/decrypt)
+│   │   ├── crypto.js          # Criptografia AES-256-GCM (encrypt/decrypt)
+│   │   └── jwt.js             # Assinatura/verificação dos tokens JWT da API
 │   ├── middleware/
-│   │   └── auth.js            # requireAuth: exige login, carrega req.user
-│   ├── controllers/           # Orquestração das requisições (um por domínio)
+│   │   ├── auth.js            # requireAuth: exige login (web), carrega req.user
+│   │   └── apiAuth.js         # requireApiAuth: token Bearer, responde 401 JSON
+│   ├── controllers/           # Orquestração (web em HTML + apiController em JSON)
 │   ├── services/              # Lógica de domínio (ver abaixo)
 │   ├── views/                 # Templates EJS (+ partials: head, nav, footer)
-│   ├── routes/index.js        # Declaração central das rotas
+│   ├── docs/openapi.js        # Especificação OpenAPI (Swagger)
+│   ├── routes/
+│   │   ├── index.js           # Rotas da aplicação web (HTML)
+│   │   └── api.js             # Rotas da API JSON (/api)
 │   ├── scheduler.js           # Cron de sincronização (00:00 e 12:00)
-│   └── server.js              # Ponto de entrada (Express + sessão + scheduler)
+│   └── server.js              # Ponto de entrada (web + API + Swagger + scheduler)
 ├── marketplace helper LP/     # Landing page comercial (site estático independente)
 │   ├── index.html · styles.css · config.js · server.js · INICIAR-LP.BAT
 ├── .env                       # Segredos locais (NÃO versionado)
@@ -198,7 +204,7 @@ User 1───1 MlAccount          (credenciais do app ML + tokens OAuth, cifra
 
 ## 6. Autenticação e sessão
 
-Dois níveis de autenticação coexistem:
+Três níveis de autenticação coexistem:
 
 1. **Autenticação do usuário na aplicação.** Cadastro com e-mail, nome da loja, WhatsApp e senha.
    A senha é validada (mínimo 8 caracteres, ao menos 1 maiúscula e 1 número) e armazenada como
@@ -210,6 +216,11 @@ Dois níveis de autenticação coexistem:
    **aplicativo** no Mercado Livre (App ID, Secret, Redirect URI) na tela *Autorização*, autoriza o
    acesso e cola o `code` de retorno. A aplicação troca o `code` por `access_token` e
    `refresh_token`, renovando-os automaticamente quando expiram.
+
+3. **Token JWT da API (`/api`).** Para o front-end React, o aplicativo React Native e o dispositivo
+   IoT, a API JSON autentica por **token JWT** (`Authorization: Bearer <token>`), emitido no login e
+   independente da sessão web. O *middleware* `requireApiAuth` responde **401 em JSON**, sem redirecionar.
+   Detalhes e endpoints na seção [Mapa de rotas](#13-mapa-de-rotas).
 
 A recuperação de senha por e-mail existe como **placeholder** (interface pronta, envio de e-mail
 ainda não configurado).
@@ -400,6 +411,30 @@ hospedada em qualquer serviço (Vercel, Netlify, GitHub Pages, etc.) sem o Node.
 | GET | `/export` | Exporta Excel |
 | GET | `/conta` · POST `/conta/perfil` · POST `/conta/senha` | Minha conta |
 
+### API JSON (`/api`) — para front React, app React Native e IoT
+
+Além das páginas renderizadas acima, a aplicação expõe uma **API JSON** em `/api`, para um front-end
+web (React), um aplicativo mobile (React Native) e o dispositivo IoT. A autenticação é por **token JWT**
+(`Authorization: Bearer <token>`), independente da sessão web. O **CORS** é liberado em `/api`. A
+documentação interativa (**Swagger UI**) fica em **`/api/docs`** e a especificação OpenAPI em
+`/api/openapi.json`.
+
+| Método | Rota | Função |
+|---|---|---|
+| POST | `/api/login` · `/api/register` | Autentica/cria conta e devolve `{ token, user }` (públicas) |
+| GET | `/api/me` | Usuário autenticado e status da conexão com o Mercado Livre |
+| GET | `/api/dashboard` | KPIs, insights e frete divergente |
+| GET | `/api/anuncios` | Lista de anúncios (`search`, `sort`, `dir`, `filter`, `page`) |
+| GET | `/api/produtos` | Produtos por SKU (custo, medidas, frete cobrado × real) |
+| POST | `/api/produtos/:sku/custo` · `/api/produtos/:sku/medidas` | Define custo / medidas do SKU |
+| GET/PUT | `/api/regras` | Regras de negócio (alíquotas) |
+| GET | `/api/frete/estimar` | Calculadora de frete por cubagem |
+| GET/PUT | `/api/config` · `/api/config/cep` | CEP e última sincronização |
+| POST/GET | `/api/sync` · `/api/sync/status` | Sincronização e progresso |
+| POST | `/api/iot/medidas` | Recebe a leitura do dispositivo (peso + dimensões) e salva no SKU |
+
+As regras de negócio são as mesmas da web: a API apenas serializa em JSON os resultados dos *services*.
+
 ---
 
 ## 14. Variáveis de ambiente
@@ -410,6 +445,7 @@ Arquivo `.env` (modelo em `.env.example`):
 |---|---|
 | `PORT` | Porta do aplicativo (padrão **3333**) |
 | `SESSION_SECRET` | Segredo de assinatura do *cookie* de sessão (aleatório, estável) |
+| `JWT_SECRET` | Segredo dos tokens JWT da API `/api` (opcional; usa `SESSION_SECRET` se vazio) |
 | `ENCRYPTION_KEY` | Chave (64 hex) para cifrar segredos do ML no banco (estável) |
 | `DATABASE_URL` | Caminho do SQLite — `file:./dev.db` |
 
@@ -483,7 +519,7 @@ Isso cria o `dev.db` (vazio) e o cliente do Prisma.
 npm start
 ```
 
-Acesse **<http://localhost:3333>**.
+Acesse **<http://localhost:3333>** (aplicação web) e **<http://localhost:3333/api/docs>** (documentação da API).
 
 > **No Windows**, em vez dos passos 15.2 a 15.5, basta um duplo clique em **`INICIAR.BAT`**:
 > ele instala dependências (na primeira vez), prepara o banco, libera a porta 3333 e abre o Chrome.
